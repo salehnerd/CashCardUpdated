@@ -3,19 +3,24 @@ package example.cashcard;
 import com.jayway.jsonpath.DocumentContext;
 
 import com.jayway.jsonpath.JsonPath;
+
+import net.minidev.json.JSONArray;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.annotation.DirtiesContext.ClassMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.net.URI;
 
 //This will start our Spring Boot application and make it available for our test to perform requests to it.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD) //The reason is that one of the other tests is interfering with our new test by creating a new Cash Card. @DirtiesContext fixes this problem by causing Spring to start with a clean state, as if those other tests hadn't been run. Removing it (commenting it out) from the class caused our new test to fail. Although you can use @DirtiesContext to work around inter-test interaction, you shouldn't use it indiscriminately; you should have a good reason. Our reason here is to clean up after creating a new Cash Card.
 class CashCardApplicationTests {
 	
 	//We've asked Spring to inject a test helper that’ll allow us to make HTTP requests to the locally running application.
@@ -59,6 +64,7 @@ class CashCardApplicationTests {
     }
     
     @Test
+    @DirtiesContext
     void shouldCreateANewCashCard() {
     	//The database will create and manage all unique CashCard.id values for us. We shouldn't provide one.
         CashCard newCashCard = new CashCard(null, 250.00);
@@ -87,7 +93,77 @@ class CashCardApplicationTests {
      
 }
     
+    @Test
+    void shouldReturnAllCashCardsWhenListIsRequested()
+    {
+        ResponseEntity<String> response = restTemplate.getForEntity("/cashcards", String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        
+        DocumentContext documentContext = JsonPath.parse(response.getBody());
+        
+        					//calculates the length of the array.
+        int cashCardCount = documentContext.read("$.length()");
+        assertThat(cashCardCount).isEqualTo(3);
+
+        //.read("$..id") retrieves the list of all id values returned
+        JSONArray ids = documentContext.read("$..id");
+        assertThat(ids).containsExactlyInAnyOrder(99, 100, 101);
+
+        //while .read("$..amount") collects all amounts returned.
+        JSONArray amounts = documentContext.read("$..amount");
+        assertThat(amounts).containsExactlyInAnyOrder(123.45, 1.00, 150.00);
+        }
+    
+    @Test
+    void shouldReturnAPageOfCashCards() 
+    {
+        ResponseEntity<String> response = restTemplate.getForEntity("/cashcards?page=0&size=1", String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        DocumentContext documentContext = JsonPath.parse(response.getBody());
+        JSONArray page = documentContext.read("$[*]");
+        assertThat(page.size()).isEqualTo(1);
+    }
+
+    
+    @Test
+    void shouldReturnASortedPageOfCashCards() {
+    	
+    	/*
+    	 * Understand the test.
+
+			The URI we're requesting contains both pagination and sorting information: /cashcards?page=0&size=1&sort=amount,desc
+
+			page=0: Get the first page. Page indexes start at 0.
+			size=1: Each page has size 1.
+			sort=amount,desc
+			*/
+        ResponseEntity<String> response = restTemplate.getForEntity("/cashcards?page=0&size=1&sort=amount,desc", String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        DocumentContext documentContext = JsonPath.parse(response.getBody());
+        JSONArray read = documentContext.read("$[*]");
+        assertThat(read.size()).isEqualTo(1);
+
+        double amount = documentContext.read("$[0].amount");
+        assertThat(amount).isEqualTo(150.00);
+    }
+
+    
+    
+    @Test
+    void shouldReturnASortedPageOfCashCardsWithNoParametersAndUseDefaultValues() {
+        ResponseEntity<String> response = restTemplate.getForEntity("/cashcards", String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        DocumentContext documentContext = JsonPath.parse(response.getBody());
+        JSONArray page = documentContext.read("$[*]");
+        assertThat(page.size()).isEqualTo(3);
+
+        JSONArray amounts = documentContext.read("$..amount");
+        assertThat(amounts).containsExactly(1.00, 123.45, 150.00);
+    }
+    }
     	
     
     
-}

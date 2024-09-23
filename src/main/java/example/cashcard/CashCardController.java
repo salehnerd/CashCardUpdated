@@ -1,17 +1,16 @@
 package example.cashcard;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
-
-
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import java.util.Optional;
-import java.net.URI;
-import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
+
+import java.net.URI;
+import java.util.*;
+
 
 //This tells Spring that this class is a Component of type RestController and capable of handling 
 //HTTP requests.
@@ -75,10 +74,25 @@ class CashCardController {
 	    //We were able to add UriComponentsBuilder ucb as a method argument to this POST handler method and it was 
 	    //automatically passed in. How so? It was injected from our now-familiar friend, Spring's IoC Container. Thanks, Spring Web!
 	 }
+	 	
+
+	 @GetMapping							//Pageable is yet another object that Spring Web provides for us. Since we specified the URI parameters of page=0&size=1, pageable will contain the values we need.
+	 private ResponseEntity<List<CashCard>> findAll(Pageable pageable)
 	 
-	 
+	 {
+		 //PageRequest is a basic Java Bean implementation of Pageable. Things that want paging and sorting implementation often support this, such as some types of Spring Data Repositories.
+		 Page<CashCard> page = cashCardRepository.findAll(
+				PageRequest.of(
+				 pageable.getPageNumber(),
+				 pageable.getPageSize(),
+				 //The answer is that the getSortOr() method provides default values for the page, size, and sort parameters. The default values come from two different sources:
+				 //Spring provides the default page and size values (they are 0 and 20, respectively). A default of 20 for page size explains why all three of our Cash Cards were returned. Again: we didn't need to explicitly define these defaults. Spring provides them "out of the box".
+				 //We defined the default sort parameter in our own code, by passing a Sort object to getSortOr():
+				 pageable.getSortOr(Sort.by(Sort.Direction.ASC, "amount")
+						 )));
+		 return ResponseEntity.ok(page.getContent());
+	}
+
 }
-	
-	
 	
 
